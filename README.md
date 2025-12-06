@@ -1,19 +1,43 @@
-# QuickNotes (MERN Mini Project)
+# QuickNotes
 
-## What it is
-Small MERN stack mini-project to demonstrate end-to-end development:
-- React frontend (create-react-app / Vite)
-- Node.js + Express backend
-- MongoDB (placeholder for now)
+A minimal, modern notes app built with the MERN stack — React (Vite), Express, and MongoDB Atlas.  
+Designed as a polished portfolio project with full CRUD, a clean dark UI, and smooth interactions.
 
-## Current status
-- Repo scaffolded with frontend and backend
-- Basic API route implemented
-- Next: connect DB, add CRUD, deploy
+---
+
+## Demo
+> Live Frontend: **_add your Vercel URL here_**  
+> Live Backend: **_add your Render/Heroku URL here_**
+
+![QuickNotes Demo](assets/demo.gif)  
+> Replace `assets/demo.gif` with your real demo GIF path or URL.
+
+---
+
+## Features
+
+- Create, read, update and delete notes (CRUD).  
+- Notes stored in MongoDB Atlas.  
+- Responsive, modern gradient + glassmorphism UI.  
+- Edit notes in a focused modal with keyboard support.  
+- Simple, deployable architecture (client + server separated).
+
+---
 
 ## Tech stack
-React, Node.js, Express, MongoDB, Git
 
-## How to run (local)
-1. Frontend: `cd client && npm install && npm start`
-2. Backend: `cd server && npm install && npm run dev`
+**Frontend**  
+- Vite + React  
+- Plain CSS (component-styled, responsive)
+
+**Backend**  
+- Node.js + Express  
+- Mongoose (MongoDB Atlas)
+
+**Tooling**  
+- Git, GitHub, Nodemon, Vite dev server
+
+---
+
+## Project structure (important files)
+
