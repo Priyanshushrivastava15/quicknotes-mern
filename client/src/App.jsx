@@ -44,7 +44,6 @@ function App() {
         body: JSON.stringify({ title, body }),
       });
       const newNote = await res.json();
-      // newNote uses _id from MongoDB
       setNotes((p) => [newNote, ...p]);
       setTitle(""); setBody("");
     } catch (err) {
@@ -96,49 +95,89 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <div className="card">
-        <h1 className="title">QuickNotes</h1>
-        <p className="sub">Backend: <span className="muted">{ping}</span></p>
+    <div className="app-container">
+      {/* Background blobs for visual effect */}
+      <div className="blob blob-1"></div>
+      <div className="blob blob-2"></div>
 
-        <div className="form">
-          <input className="input" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} />
-          <textarea className="textarea" placeholder="Body" value={body} onChange={e=>setBody(e.target.value)} rows={4} />
-          <div className="row">
-            <button className="btn primary" onClick={addNote} disabled={loading}>{loading ? "Adding..." : "Add Note"}</button>
-            <button className="btn" onClick={()=>{ setTitle(''); setBody(''); }}>Clear</button>
+      {/* Left Sidebar: Create Note */}
+      <aside className="sidebar">
+        <div className="glass-panel">
+          <header className="header">
+            <h1 className="logo-text">Quick<span className="gradient-text">Notes</span></h1>
+            <div className="status-badge">
+              <span className={`dot ${ping === 'pong' ? 'online' : 'offline'}`}></span>
+              {ping === 'pong' ? 'System Online' : ping}
+            </div>
+          </header>
+
+          <div className="create-form">
+            <h3>Create New Note</h3>
+            <input 
+              className="glass-input" 
+              placeholder="Title" 
+              value={title} 
+              onChange={e=>setTitle(e.target.value)} 
+            />
+            <textarea 
+              className="glass-input textarea" 
+              placeholder="Write your thoughts here..." 
+              value={body} 
+              onChange={e=>setBody(e.target.value)} 
+              rows={6} 
+            />
+            <div className="button-group">
+              <button className="btn-primary" onClick={addNote} disabled={loading}>
+                {loading ? "Saving..." : "Create Note"}
+              </button>
+              <button className="btn-ghost" onClick={()=>{ setTitle(''); setBody(''); }}>
+                Clear
+              </button>
+            </div>
           </div>
         </div>
+        
+        <div className="footer-credits">
+          <p>© 2025 Priyanshu Shrivastava</p>
+        </div>
+      </aside>
 
-        <h2 className="section">Notes ({notes.length})</h2>
-
-        <div className="notes">
-          {notes.length === 0 && <p className="muted">No notes yet</p>}
+      {/* Right Content: Notes Grid */}
+      <main className="main-content">
+        <h2 className="section-title">Your Collection <span className="count">{notes.length}</span></h2>
+        
+        <div className="notes-grid">
+          {notes.length === 0 && (
+            <div className="empty-state">
+              <p>No notes found. Start by creating one!</p>
+            </div>
+          )}
+          
           {notes.map(n => (
-            <div key={n._id} className="note">
-              <div className="noteHeader">
-                <strong>{n.title}</strong>
-                <div className="noteActions">
-                  <button className="link" onClick={()=>startEdit(n)}>Edit</button>
-                  <button className="link danger" onClick={()=>deleteNote(n._id)}>Delete</button>
-                </div>
+            <div key={n._id} className="note-card">
+              <div className="note-content">
+                <h4>{n.title}</h4>
+                <p>{n.body}</p>
               </div>
-              <p className="noteBody">{n.body}</p>
+              <div className="note-footer">
+                <button className="icon-btn edit" onClick={()=>startEdit(n)}>Edit</button>
+                <button className="icon-btn delete" onClick={()=>deleteNote(n._id)}>Delete</button>
+              </div>
             </div>
           ))}
         </div>
-      </div>
+      </main>
 
-      {/* Edit modal area */}
+      {/* Modal Overlay */}
       {editingId && (
-        <div className="modal">
-          <div className="modalCard">
-            <h3>Edit note</h3>
-            <input className="input" value={editTitle} onChange={e=>setEditTitle(e.target.value)} />
-            <textarea className="textarea" rows={4} value={editBody} onChange={e=>setEditBody(e.target.value)} />
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button className="btn" onClick={cancelEdit}>Cancel</button>
-              <button className="btn primary" onClick={saveEdit}>Save</button>
+        <div className="modal-overlay">
+          <div className="modal-glass">
+            <h3>Edit Note</h3>
+            <input className="glass-input" value={editTitle} onChange={e=>setEditTitle(e.target.value)} />
+            <textarea className="glass-input textarea" rows={6} value={editBody} onChange={e=>setEditBody(e.target.value)} />
+            <div className="modal-actions">
+              <button className="btn-ghost" onClick={cancelEdit}>Cancel</button>
+              <button className="btn-primary" onClick={saveEdit}>Save Changes</button>
             </div>
           </div>
         </div>
