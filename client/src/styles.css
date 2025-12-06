@@ -1,0 +1,36 @@
+/* styles.css - simple clean look */
+:root{
+  --bg:#f6f8fb;
+  --card:#ffffff;
+  --muted:#666;
+  --primary:#2563eb;
+  --danger:#e11d48;
+  --border:#e6e9ef;
+}
+body { margin:0; font-family:Inter,Segoe UI,Arial; background:var(--bg); color:#111; }
+.app { padding:28px; display:flex; align-items:flex-start; justify-content:center; min-height:100vh; }
+.card { width:100%; max-width:920px; background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(20,20,50,0.06); padding:22px; border:1px solid var(--border); }
+.title{margin:0;font-size:26px}
+.sub{margin:6px 0;color:var(--muted)}
+.form{margin-top:12px;display:grid;gap:8px}
+.input, .textarea { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); font-size:14px; }
+.row{display:flex;gap:8px}
+.btn{padding:8px 12px; border-radius:8px; border:1px solid transparent; background:transparent; cursor:pointer}
+.btn.primary{background:var(--primary); color:white; border-color:var(--primary)}
+.btn:disabled{opacity:0.6; cursor:not-allowed}
+.section{margin-top:18px;margin-bottom:8px}
+.notes{display:grid;gap:10px}
+.note{padding:12px;border-radius:10px;border:1px solid var(--border);background:linear-gradient(180deg, #fff, #fff)}
+.noteHeader{display:flex;justify-content:space-between;align-items:center}
+.noteActions{display:flex;gap:8px}
+.link{background:transparent;border:none;color:var(--primary);cursor:pointer}
+.link.danger{color:var(--danger)}
+.noteBody{margin:8px 0 0;color:#222}
+.muted{color:var(--muted)}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;padding:20px}
+.modalCard{background:var(--card);padding:18px;border-radius:10px;max-width:640px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,0.15)}
+@media (max-width:640px){
+  .card{padding:16px}
+  .title{font-size:20px}
+}
