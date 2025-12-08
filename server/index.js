@@ -69,4 +69,10 @@ app.put('/api/notes/:id', async (req, res) => {
     console.error(err);
     res.status(400).json({ error: 'bad request' });
   }
+
+  // Add this temporarily to verify deployment
+app.get('/', (req, res) => {
+  res.send('SERVER IS RUNNING! Go to /api/your-endpoint to see data.');
+});
+
 });
