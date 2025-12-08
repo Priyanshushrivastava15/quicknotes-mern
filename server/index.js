@@ -11,7 +11,6 @@ app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const MONGO = process.env.MONGO_URI;
 
-// <-- corrected connection: no useNewUrlParser / useUnifiedTopology options -->
 mongoose.connect(MONGO)
   .then(() => console.log('MongoDB connected'))
   .catch(err => {
@@ -21,7 +20,7 @@ mongoose.connect(MONGO)
 
 app.get('/api/ping', (req, res) => res.json({ message: 'pong' }));
 
-// GET all notes (most recent first)
+
 app.get('/api/notes', async (req, res) => {
   try {
     const notes = await Note.find().sort({ createdAt: -1 });
@@ -32,7 +31,7 @@ app.get('/api/notes', async (req, res) => {
   }
 });
 
-// CREATE note
+
 app.post('/api/notes', async (req, res) => {
   try {
     const { title, body } = req.body;
@@ -46,7 +45,7 @@ app.post('/api/notes', async (req, res) => {
   }
 });
 
-// DELETE note
+
 app.delete('/api/notes/:id', async (req, res) => {
   try {
     await Note.findByIdAndDelete(req.params.id);
@@ -59,7 +58,7 @@ app.delete('/api/notes/:id', async (req, res) => {
 
 app.listen(PORT, () => console.log('Server running on', PORT));
 
-// UPDATE note
+
 app.put('/api/notes/:id', async (req, res) => {
   try {
     const { title, body } = req.body;
