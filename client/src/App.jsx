@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
-import { api } from "./utils/api"; // Integrating your existing API file
+import { api } from "./utils/api";
 import "./styles.css";
+
+// Helper to determine Backend URL (Same logic as api.js)
+const BASE_URL = window.location.hostname === "localhost"
+  ? "http://localhost:5000/api"
+  : "https://quicknotes-backend-9k0a.onrender.com/api";
 
 export default function App() {
   // --- STATE ---
+  const [serverReady, setServerReady] = useState(false); // New State for Server Health
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem("token") || null);
-  const [isLoginView, setIsLoginView] = useState(true); // Toggle Login/Signup
+  const [isLoginView, setIsLoginView] = useState(true);
   
   // Data State
   const [notes, setNotes] = useState([]);
@@ -19,19 +25,43 @@ export default function App() {
   const [noteForm, setNoteForm] = useState({ title: "", body: "" });
   const [editingId, setEditingId] = useState(null);
 
-  // --- INITIALIZATION ---
+  // --- 1. SERVER WAKE-UP LOGIC ---
   useEffect(() => {
-    // If we have a token, try to fetch notes (validates session)
-    if (token) {
+    const wakeUpServer = async () => {
+      try {
+        // We use a simple fetch to the health check endpoint or just the root
+        // Note: Using a lightweight endpoint is better if you have one, 
+        // but fetching notes (even if unauthorized) proves the server is up.
+        // Or simpler: just hit the root of the API.
+        const res = await fetch(`${BASE_URL}/ping`).catch(() => null); 
+        
+        // If we get ANY response (even 404 or 401), the server is UP.
+        // Only "Failed to fetch" means it's down/sleeping.
+        if (res) {
+          setServerReady(true);
+        } else {
+          throw new Error("Server sleeping");
+        }
+      } catch (e) {
+        // Retry after 2 seconds
+        console.log("Server sleeping... pinging again in 2s");
+        setTimeout(wakeUpServer, 2000);
+      }
+    };
+
+    wakeUpServer();
+  }, []);
+
+  // --- INITIALIZATION (Auth) ---
+  useEffect(() => {
+    if (token && serverReady) {
       fetchNotes();
-      // Optionally decode token to get user name, or just store user in localstorage too
       const savedUser = localStorage.getItem("user");
       if (savedUser) setUser(JSON.parse(savedUser));
     }
-  }, [token]);
+  }, [token, serverReady]);
 
   // --- API ACTIONS ---
-
   const fetchNotes = async () => {
     setLoading(true);
     try {
@@ -49,7 +79,6 @@ export default function App() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       let data;
       if (isLoginView) {
@@ -57,14 +86,10 @@ export default function App() {
       } else {
         data = await api.signup(authForm.name, authForm.email, authForm.password);
       }
-
-      // Save Session
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
-      
-      // Clear sensitive form data
       setAuthForm({ name: "", email: "", password: "" });
     } catch (err) {
       setError(err.message || "Authentication failed");
@@ -76,21 +101,18 @@ export default function App() {
   const handleCreateOrUpdate = async (e) => {
     e.preventDefault();
     if (!noteForm.title.trim()) return;
-
     try {
       if (editingId) {
-        // UPDATE
         const updated = await api.updateNote(token, editingId, noteForm);
         setNotes(notes.map(n => n._id === editingId ? updated : n));
         setEditingId(null);
       } else {
-        // CREATE
         const created = await api.createNote(token, noteForm);
         setNotes([created, ...notes]);
       }
       setNoteForm({ title: "", body: "" });
     } catch (err) {
-      alert("Failed to save note: " + err.message);
+      alert("Failed to save: " + err.message);
     }
   };
 
@@ -122,8 +144,27 @@ export default function App() {
   };
 
   // --- RENDER HELPERS ---
-  
-  // 1. AUTH SCREEN
+
+  // 1. SERVER WAKE-UP SCREEN
+  if (!serverReady) {
+    return (
+      <div className="app-container">
+        <div className="blob-container">
+          <div className="blob blob-1"></div>
+          <div className="blob blob-2"></div>
+        </div>
+        <div className="loading-container">
+          <div className="loader-pulse">⚡</div>
+          <div className="loading-text">
+            <h2>Waking up Server...</h2>
+            <p>We are using a free server tier. <br/>This may take up to 60 seconds.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. AUTH SCREEN
   if (!token) {
     return (
       <div className="auth-container">
@@ -135,7 +176,6 @@ export default function App() {
         <div className="auth-box glass-panel">
           <h1 className="brand-title">QuickNotes</h1>
           <h2 style={{marginTop: 0}}>{isLoginView ? "Welcome Back" : "Create Account"}</h2>
-          
           {error && <div className="error-msg">{error}</div>}
           
           <form onSubmit={handleAuth}>
@@ -164,7 +204,6 @@ export default function App() {
               onChange={e => setAuthForm({...authForm, password: e.target.value})}
               required
             />
-            
             <button type="submit" className="btn-primary" disabled={loading}>
               {loading ? "Please wait..." : (isLoginView ? "Log In" : "Sign Up")}
             </button>
@@ -181,7 +220,7 @@ export default function App() {
     );
   }
 
-  // 2. MAIN APP SCREEN
+  // 3. MAIN APP
   return (
     <div className="app-container">
       <div className="blob-container">
@@ -192,7 +231,6 @@ export default function App() {
       <Sidebar user={user} onLogout={handleLogout} />
 
       <main className="main-content">
-        {/* LEFT: FORM */}
         <section className="create-panel">
           <h2>{editingId ? "Edit Note" : "Create New Note"}</h2>
           <form onSubmit={handleCreateOrUpdate}>
@@ -226,14 +264,13 @@ export default function App() {
           </form>
         </section>
 
-        {/* RIGHT: NOTES LIST */}
         <section className="notes-section">
           <div className="section-header">
             <h1>Your Collection</h1>
             <span className="badge">{notes.length} Notes</span>
           </div>
 
-          {loading && <div style={{textAlign: "center", color: "#94a3b8"}}>Loading your notes...</div>}
+          {loading && <div style={{textAlign: "center", color: "#94a3b8"}}>Loading notes...</div>}
 
           <div className="notes-grid">
             {!loading && notes.map((note) => (
@@ -245,17 +282,15 @@ export default function App() {
                     {note.updatedAt ? new Date(note.updatedAt).toLocaleDateString() : "Just now"}
                   </div>
                 </div>
-                
                 <div className="card-actions">
                   <button onClick={() => startEditing(note)} className="btn-icon edit" title="Edit">✏️</button>
                   <button onClick={() => handleDelete(note._id)} className="btn-icon delete" title="Delete">🗑️</button>
                 </div>
               </div>
             ))}
-            
             {!loading && notes.length === 0 && (
               <div style={{ color: "#94a3b8", gridColumn: "1/-1", textAlign: "center", marginTop: "2rem" }}>
-                No notes found. Create one on the left!
+                No notes found.
               </div>
             )}
           </div>
