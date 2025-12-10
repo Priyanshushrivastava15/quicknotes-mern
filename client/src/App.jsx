@@ -1,6 +1,13 @@
-// client/src/App.jsx
+// src/App.jsx
 import { useEffect, useState, useRef } from "react";
 import "./styles.css";
+
+// AUTOMATIC SWITCHING:
+// If running locally (localhost), use http://localhost:5000
+// If running on the web, use your Render Backend URL.
+const BASE = window.location.hostname === 'localhost'
+  ? "http://localhost:5000"
+  : "https://quicknotes-backend-9k0a.onrender.com";
 
 function App() {
   const [ping, setPing] = useState("loading...");
@@ -9,30 +16,33 @@ function App() {
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // edit state
+  // Edit state
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const editTitleRef = useRef(null);
 
   useEffect(() => {
-    // ping + load notes on mount
-    fetch("/api/ping")
+    // 1. Check if backend is alive
+    fetch(`${BASE}/api/ping`)
       .then((r) => r.json())
       .then((d) => setPing(d.message === "pong" ? "pong" : d.message))
       .catch((err) => {
         console.error("ping error:", err);
-        setPing("error");
+        setPing("offline"); // clear error message for UI
       });
 
+    // 2. Load initial notes
     loadNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadNotes() {
     try {
-      const res = await fetch("/api/notes");
+      const res = await fetch(`${BASE}/api/notes`);
+      if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
-      // ensure newest first
+      // Sort: Newest first
       if (Array.isArray(data)) {
         data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       }
@@ -47,14 +57,14 @@ function App() {
     if (!title.trim()) return alert("Please enter a title");
     setLoading(true);
     try {
-      const res = await fetch("/api/notes", {
+      const res = await fetch(`${BASE}/api/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body }),
       });
       if (!res.ok) throw new Error("create failed");
       const newNote = await res.json();
-      setNotes((p) => [newNote, ...p]);
+      setNotes((prevNotes) => [newNote, ...prevNotes]);
       setTitle("");
       setBody("");
     } catch (err) {
@@ -68,12 +78,11 @@ function App() {
   async function deleteNote(id) {
     if (!confirm("Delete this note?")) return;
     try {
-      const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE}/api/notes/${id}`, { method: "DELETE" });
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "delete failed");
+        throw new Error("delete failed");
       }
-      setNotes((n) => n.filter((x) => String(x._id) !== String(id)));
+      setNotes((prevNotes) => prevNotes.filter((n) => String(n._id) !== String(id)));
     } catch (err) {
       console.error("deleteNote error:", err);
       alert("Delete failed");
@@ -84,10 +93,9 @@ function App() {
     setEditingId(String(note._id));
     setEditTitle(note.title || "");
     setEditBody(note.body || "");
-    // focus input after modal renders
     setTimeout(() => {
       if (editTitleRef.current) editTitleRef.current.focus();
-    }, 60);
+    }, 50);
   }
 
   function cancelEdit() {
@@ -99,17 +107,17 @@ function App() {
   async function saveEdit() {
     if (!editTitle.trim()) return alert("Title required");
     try {
-      const res = await fetch(`/api/notes/${editingId}`, {
+      const res = await fetch(`${BASE}/api/notes/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: editTitle.trim(), body: editBody }),
       });
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "update failed");
-      }
+      if (!res.ok) throw new Error("update failed");
+      
       const updated = await res.json();
-      setNotes((n) => n.map((x) => (String(x._id) === String(updated._id) ? updated : x)));
+      setNotes((prevNotes) => 
+        prevNotes.map((n) => (String(n._id) === String(updated._id) ? updated : n))
+      );
       cancelEdit();
     } catch (err) {
       console.error("saveEdit error:", err);
@@ -117,18 +125,17 @@ function App() {
     }
   }
 
-  // close modal when clicking the backdrop
   function onModalBgClick(e) {
-    if (e.target.classList && e.target.classList.contains("modal-overlay")) {
+    if (e.target.classList.contains("modal-overlay")) {
       cancelEdit();
     }
   }
 
   return (
     <div className="app-container">
-      {/* background blobs */}
-      <div className="blob blob-1" aria-hidden></div>
-      <div className="blob blob-2" aria-hidden></div>
+      {/* Background Blobs */}
+      <div className="blob blob-1" aria-hidden="true"></div>
+      <div className="blob blob-2" aria-hidden="true"></div>
 
       {/* Sidebar */}
       <aside className="sidebar">
@@ -137,18 +144,17 @@ function App() {
             <h1 className="logo-text">Quick<span className="gradient-text">Notes</span></h1>
             <div className="status-badge">
               <span className={`dot ${ping === "pong" ? "online" : "offline"}`}></span>
-              {ping === "pong" ? "System Online" : ping}
+              {ping === "pong" ? "System Online" : "Connecting..."}
             </div>
           </header>
 
-          <div className="create-form" aria-label="create-note">
+          <div className="create-form">
             <h3>Create New Note</h3>
             <input
               className="glass-input"
               placeholder="Title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              aria-label="note-title"
             />
             <textarea
               className="glass-input textarea"
@@ -156,7 +162,6 @@ function App() {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={6}
-              aria-label="note-body"
             />
             <div className="button-group">
               <button className="btn-primary" onClick={addNote} disabled={loading}>
@@ -170,34 +175,34 @@ function App() {
         </div>
 
         <div className="footer-credits">
-          <p>© 2025 Priyanshu Shrivastava</p>
+          <p>© 2025 QuickNotes App</p>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Main Content */}
       <main className="main-content">
         <div className="section-title">
           <h2>Your Collection</h2>
           <span className="count">{notes.length}</span>
         </div>
 
-        <div className="notes-grid" role="list">
+        <div className="notes-grid">
           {notes.length === 0 && (
             <div className="empty-state">
-              <p>No notes yet — create your first one.</p>
+              <p style={{color: '#94a3b8'}}>No notes yet — create your first one.</p>
             </div>
           )}
 
           {notes.map((n) => (
-            <article key={n._id} className="note-card" role="listitem" aria-label={n.title}>
+            <article key={n._id} className="note-card">
               <div className="note-content">
                 <h4>{n.title}</h4>
                 <p>{n.body}</p>
               </div>
 
-              <div className="note-footer" aria-hidden>
-                <button className="icon-btn edit" onClick={() => startEdit(n)} title="Edit">Edit</button>
-                <button className="icon-btn delete" onClick={() => deleteNote(n._id)} title="Delete">Delete</button>
+              <div className="note-footer">
+                <button className="icon-btn edit" onClick={() => startEdit(n)}>Edit</button>
+                <button className="icon-btn delete" onClick={() => deleteNote(n._id)}>Delete</button>
               </div>
             </article>
           ))}
@@ -207,10 +212,20 @@ function App() {
       {/* Edit Modal */}
       {editingId && (
         <div className="modal-overlay" onMouseDown={onModalBgClick}>
-          <div className="modal-glass" role="dialog" aria-modal="true">
+          <div className="modal-glass">
             <h3>Edit Note</h3>
-            <input ref={editTitleRef} className="glass-input" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-            <textarea className="glass-input textarea" rows={6} value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+            <input 
+              ref={editTitleRef} 
+              className="glass-input" 
+              value={editTitle} 
+              onChange={(e) => setEditTitle(e.target.value)} 
+            />
+            <textarea 
+              className="glass-input textarea" 
+              rows={6} 
+              value={editBody} 
+              onChange={(e) => setEditBody(e.target.value)} 
+            />
             <div className="modal-actions">
               <button className="btn-ghost" onClick={cancelEdit}>Cancel</button>
               <button className="btn-primary" onClick={saveEdit}>Save Changes</button>
