@@ -1,240 +1,266 @@
-// src/App.jsx
-import { useEffect, useState, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import Sidebar from "./Sidebar";
+import { api } from "./utils/api"; // Integrating your existing API file
 import "./styles.css";
 
-// AUTOMATIC SWITCHING:
-// If running locally (localhost), use http://localhost:5000
-// If running on the web, use your Render Backend URL.
-const BASE = window.location.hostname === 'localhost'
-  ? "http://localhost:5000"
-  : "https://quicknotes-backend-9k0a.onrender.com";
-
-function App() {
-  const [ping, setPing] = useState("loading...");
+export default function App() {
+  // --- STATE ---
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem("token") || null);
+  const [isLoginView, setIsLoginView] = useState(true); // Toggle Login/Signup
+  
+  // Data State
   const [notes, setNotes] = useState([]);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Edit state
+  // Form State
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
+  const [noteForm, setNoteForm] = useState({ title: "", body: "" });
   const [editingId, setEditingId] = useState(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editBody, setEditBody] = useState("");
-  const editTitleRef = useRef(null);
 
+  // --- INITIALIZATION ---
   useEffect(() => {
-    // 1. Check if backend is alive
-    fetch(`${BASE}/api/ping`)
-      .then((r) => r.json())
-      .then((d) => setPing(d.message === "pong" ? "pong" : d.message))
-      .catch((err) => {
-        console.error("ping error:", err);
-        setPing("offline"); // clear error message for UI
-      });
-
-    // 2. Load initial notes
-    loadNotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function loadNotes() {
-    try {
-      const res = await fetch(`${BASE}/api/notes`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      // Sort: Newest first
-      if (Array.isArray(data)) {
-        data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      }
-      setNotes(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("loadNotes error:", err);
-      setNotes([]);
+    // If we have a token, try to fetch notes (validates session)
+    if (token) {
+      fetchNotes();
+      // Optionally decode token to get user name, or just store user in localstorage too
+      const savedUser = localStorage.getItem("user");
+      if (savedUser) setUser(JSON.parse(savedUser));
     }
-  }
+  }, [token]);
 
-  async function addNote() {
-    if (!title.trim()) return alert("Please enter a title");
+  // --- API ACTIONS ---
+
+  const fetchNotes = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), body }),
-      });
-      if (!res.ok) throw new Error("create failed");
-      const newNote = await res.json();
-      setNotes((prevNotes) => [newNote, ...prevNotes]);
-      setTitle("");
-      setBody("");
+      const data = await api.fetchNotes(token);
+      setNotes(data);
     } catch (err) {
-      console.error("addNote error:", err);
-      alert("Failed to add note");
+      console.error(err);
+      if (err.message === "Unauthorized" || err.status === 401) handleLogout();
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function deleteNote(id) {
-    if (!confirm("Delete this note?")) return;
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
     try {
-      const res = await fetch(`${BASE}/api/notes/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        throw new Error("delete failed");
+      let data;
+      if (isLoginView) {
+        data = await api.login(authForm.email, authForm.password);
+      } else {
+        data = await api.signup(authForm.name, authForm.email, authForm.password);
       }
-      setNotes((prevNotes) => prevNotes.filter((n) => String(n._id) !== String(id)));
-    } catch (err) {
-      console.error("deleteNote error:", err);
-      alert("Delete failed");
-    }
-  }
 
-  function startEdit(note) {
-    setEditingId(String(note._id));
-    setEditTitle(note.title || "");
-    setEditBody(note.body || "");
-    setTimeout(() => {
-      if (editTitleRef.current) editTitleRef.current.focus();
-    }, 50);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditTitle("");
-    setEditBody("");
-  }
-
-  async function saveEdit() {
-    if (!editTitle.trim()) return alert("Title required");
-    try {
-      const res = await fetch(`${BASE}/api/notes/${editingId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: editTitle.trim(), body: editBody }),
-      });
-      if (!res.ok) throw new Error("update failed");
+      // Save Session
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
       
-      const updated = await res.json();
-      setNotes((prevNotes) => 
-        prevNotes.map((n) => (String(n._id) === String(updated._id) ? updated : n))
-      );
-      cancelEdit();
+      // Clear sensitive form data
+      setAuthForm({ name: "", email: "", password: "" });
     } catch (err) {
-      console.error("saveEdit error:", err);
-      alert("Update failed");
+      setError(err.message || "Authentication failed");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleCreateOrUpdate = async (e) => {
+    e.preventDefault();
+    if (!noteForm.title.trim()) return;
+
+    try {
+      if (editingId) {
+        // UPDATE
+        const updated = await api.updateNote(token, editingId, noteForm);
+        setNotes(notes.map(n => n._id === editingId ? updated : n));
+        setEditingId(null);
+      } else {
+        // CREATE
+        const created = await api.createNote(token, noteForm);
+        setNotes([created, ...notes]);
+      }
+      setNoteForm({ title: "", body: "" });
+    } catch (err) {
+      alert("Failed to save note: " + err.message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this note?")) return;
+    try {
+      await api.deleteNote(token, id);
+      setNotes(notes.filter(n => n._id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        setNoteForm({ title: "", body: "" });
+      }
+    } catch (err) {
+      alert("Failed to delete: " + err.message);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
+    setNotes([]);
+  };
+
+  const startEditing = (note) => {
+    setEditingId(note._id);
+    setNoteForm({ title: note.title, body: note.content || note.body || "" });
+  };
+
+  // --- RENDER HELPERS ---
+  
+  // 1. AUTH SCREEN
+  if (!token) {
+    return (
+      <div className="auth-container">
+        <div className="blob-container">
+          <div className="blob blob-1"></div>
+          <div className="blob blob-2"></div>
+        </div>
+        
+        <div className="auth-box glass-panel">
+          <h1 className="brand-title">QuickNotes</h1>
+          <h2 style={{marginTop: 0}}>{isLoginView ? "Welcome Back" : "Create Account"}</h2>
+          
+          {error && <div className="error-msg">{error}</div>}
+          
+          <form onSubmit={handleAuth}>
+            {!isLoginView && (
+              <input 
+                className="glass-input" 
+                placeholder="Full Name" 
+                value={authForm.name}
+                onChange={e => setAuthForm({...authForm, name: e.target.value})}
+                required
+              />
+            )}
+            <input 
+              className="glass-input" 
+              type="email"
+              placeholder="Email Address" 
+              value={authForm.email}
+              onChange={e => setAuthForm({...authForm, email: e.target.value})}
+              required
+            />
+            <input 
+              className="glass-input" 
+              type="password"
+              placeholder="Password" 
+              value={authForm.password}
+              onChange={e => setAuthForm({...authForm, password: e.target.value})}
+              required
+            />
+            
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? "Please wait..." : (isLoginView ? "Log In" : "Sign Up")}
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            {isLoginView ? "New here?" : "Already have an account?"}{" "}
+            <span onClick={() => setIsLoginView(!isLoginView)}>
+              {isLoginView ? "Create an account" : "Login"}
+            </span>
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  function onModalBgClick(e) {
-    if (e.target.classList.contains("modal-overlay")) {
-      cancelEdit();
-    }
-  }
-
+  // 2. MAIN APP SCREEN
   return (
     <div className="app-container">
-      {/* Background Blobs */}
-      <div className="blob blob-1" aria-hidden="true"></div>
-      <div className="blob blob-2" aria-hidden="true"></div>
+      <div className="blob-container">
+        <div className="blob blob-1"></div>
+        <div className="blob blob-2"></div>
+      </div>
 
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="glass-panel">
-          <header className="header">
-            <h1 className="logo-text">Quick<span className="gradient-text">Notes</span></h1>
-            <div className="status-badge">
-              <span className={`dot ${ping === "pong" ? "online" : "offline"}`}></span>
-              {ping === "pong" ? "System Online" : "Connecting..."}
-            </div>
-          </header>
+      <Sidebar user={user} onLogout={handleLogout} />
 
-          <div className="create-form">
-            <h3>Create New Note</h3>
-            <input
-              className="glass-input"
-              placeholder="Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-            <textarea
-              className="glass-input textarea"
-              placeholder="Write your thoughts here..."
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={6}
-            />
-            <div className="button-group">
-              <button className="btn-primary" onClick={addNote} disabled={loading}>
-                {loading ? "Saving..." : "Create Note"}
-              </button>
-              <button className="btn-ghost" onClick={() => { setTitle(""); setBody(""); }}>
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="footer-credits">
-          <p>© 2025 QuickNotes App</p>
-        </div>
-      </aside>
-
-      {/* Main Content */}
       <main className="main-content">
-        <div className="section-title">
-          <h2>Your Collection</h2>
-          <span className="count">{notes.length}</span>
-        </div>
-
-        <div className="notes-grid">
-          {notes.length === 0 && (
-            <div className="empty-state">
-              <p style={{color: '#94a3b8'}}>No notes yet — create your first one.</p>
-            </div>
-          )}
-
-          {notes.map((n) => (
-            <article key={n._id} className="note-card">
-              <div className="note-content">
-                <h4>{n.title}</h4>
-                <p>{n.body}</p>
-              </div>
-
-              <div className="note-footer">
-                <button className="icon-btn edit" onClick={() => startEdit(n)}>Edit</button>
-                <button className="icon-btn delete" onClick={() => deleteNote(n._id)}>Delete</button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </main>
-
-      {/* Edit Modal */}
-      {editingId && (
-        <div className="modal-overlay" onMouseDown={onModalBgClick}>
-          <div className="modal-glass">
-            <h3>Edit Note</h3>
+        {/* LEFT: FORM */}
+        <section className="create-panel">
+          <h2>{editingId ? "Edit Note" : "Create New Note"}</h2>
+          <form onSubmit={handleCreateOrUpdate}>
             <input 
-              ref={editTitleRef} 
               className="glass-input" 
-              value={editTitle} 
-              onChange={(e) => setEditTitle(e.target.value)} 
+              placeholder="Title" 
+              value={noteForm.title}
+              onChange={(e) => setNoteForm({...noteForm, title: e.target.value})}
+              required
             />
             <textarea 
-              className="glass-input textarea" 
-              rows={6} 
-              value={editBody} 
-              onChange={(e) => setEditBody(e.target.value)} 
-            />
-            <div className="modal-actions">
-              <button className="btn-ghost" onClick={cancelEdit}>Cancel</button>
-              <button className="btn-primary" onClick={saveEdit}>Save Changes</button>
+              className="glass-input" 
+              rows="12" 
+              placeholder="Write your thoughts..." 
+              style={{ resize: "none" }}
+              value={noteForm.body}
+              onChange={(e) => setNoteForm({...noteForm, body: e.target.value})}
+              required
+            ></textarea>
+            
+            <div className="form-actions">
+              <button type="submit" className="btn-primary">
+                {editingId ? "Update Note" : "Save Note"}
+              </button>
+              {editingId && (
+                <button type="button" onClick={() => { setEditingId(null); setNoteForm({title:"", body:""}); }} className="btn-secondary">
+                  Cancel
+                </button>
+              )}
             </div>
+          </form>
+        </section>
+
+        {/* RIGHT: NOTES LIST */}
+        <section className="notes-section">
+          <div className="section-header">
+            <h1>Your Collection</h1>
+            <span className="badge">{notes.length} Notes</span>
           </div>
-        </div>
-      )}
+
+          {loading && <div style={{textAlign: "center", color: "#94a3b8"}}>Loading your notes...</div>}
+
+          <div className="notes-grid">
+            {!loading && notes.map((note) => (
+              <div key={note._id} className={`note-card ${editingId === note._id ? "active-editing" : ""}`}>
+                <div className="note-content">
+                  <div className="note-title">{note.title}</div>
+                  <div className="note-body">{note.content || note.body}</div>
+                  <div className="note-date">
+                    {note.updatedAt ? new Date(note.updatedAt).toLocaleDateString() : "Just now"}
+                  </div>
+                </div>
+                
+                <div className="card-actions">
+                  <button onClick={() => startEditing(note)} className="btn-icon edit" title="Edit">✏️</button>
+                  <button onClick={() => handleDelete(note._id)} className="btn-icon delete" title="Delete">🗑️</button>
+                </div>
+              </div>
+            ))}
+            
+            {!loading && notes.length === 0 && (
+              <div style={{ color: "#94a3b8", gridColumn: "1/-1", textAlign: "center", marginTop: "2rem" }}>
+                No notes found. Create one on the left!
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
-
-export default App;
