@@ -1,4 +1,2 @@
 // src/config.js
-export const API_BASE_URL = window.location.hostname === "localhost"
-  ? "http://localhost:5000"
-  : "https://quicknotes-backend-9k0a.onrender.com";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
