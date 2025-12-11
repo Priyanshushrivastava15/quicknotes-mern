@@ -1,7 +1,6 @@
-// src/utils/api.js
-const BASE_URL = window.location.hostname === "localhost"
-  ? "http://localhost:5000/api"
-  : "https://quicknotes-backend-9k0a.onrender.com/api";
+import { API_BASE_URL } from "../config";
+
+const BASE_URL = `${API_BASE_URL}/api`;
 
 const getHeaders = (token) => {
   const headers = { "Content-Type": "application/json" };
@@ -10,6 +9,12 @@ const getHeaders = (token) => {
 };
 
 export const api = {
+  // Check Server Health
+  ping: async () => {
+    const res = await fetch(`${API_BASE_URL}/ping`);
+    return res;
+  },
+
   // Auth
   login: async (email, password) => {
     const res = await fetch(`${BASE_URL}/auth/login`, {

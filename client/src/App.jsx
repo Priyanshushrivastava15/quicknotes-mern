@@ -1,27 +1,23 @@
 import React, { useState, useEffect } from "react";
+import { Toaster, toast } from "react-hot-toast";
 import Sidebar from "./Sidebar";
+import Auth from "./components/Auth";
+import ServerLoading from "./components/ServerLoading";
 import { api } from "./utils/api";
 import "./styles.css";
 
-// Helper to determine Backend URL (Same logic as api.js)
-const BASE_URL = window.location.hostname === "localhost"
-  ? "http://localhost:5000/api"
-  : "https://quicknotes-backend-9k0a.onrender.com/api";
-
 export default function App() {
   // --- STATE ---
-  const [serverReady, setServerReady] = useState(false); // New State for Server Health
+  const [serverReady, setServerReady] = useState(false);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem("token") || null);
-  const [isLoginView, setIsLoginView] = useState(true);
   
   // Data State
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Form State
-  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
   const [noteForm, setNoteForm] = useState({ title: "", body: "" });
   const [editingId, setEditingId] = useState(null);
 
@@ -29,30 +25,21 @@ export default function App() {
   useEffect(() => {
     const wakeUpServer = async () => {
       try {
-        // We use a simple fetch to the health check endpoint or just the root
-        // Note: Using a lightweight endpoint is better if you have one, 
-        // but fetching notes (even if unauthorized) proves the server is up.
-        // Or simpler: just hit the root of the API.
-        const res = await fetch(`${BASE_URL}/ping`).catch(() => null); 
-        
-        // If we get ANY response (even 404 or 401), the server is UP.
-        // Only "Failed to fetch" means it's down/sleeping.
+        const res = await api.ping().catch(() => null);
         if (res) {
           setServerReady(true);
         } else {
           throw new Error("Server sleeping");
         }
       } catch (e) {
-        // Retry after 2 seconds
         console.log("Server sleeping... pinging again in 2s");
         setTimeout(wakeUpServer, 2000);
       }
     };
-
     wakeUpServer();
   }, []);
 
-  // --- INITIALIZATION (Auth) ---
+  // --- INITIALIZATION ---
   useEffect(() => {
     if (token && serverReady) {
       fetchNotes();
@@ -61,73 +48,24 @@ export default function App() {
     }
   }, [token, serverReady]);
 
-  // --- API ACTIONS ---
+  // --- ACTIONS ---
   const fetchNotes = async () => {
     setLoading(true);
     try {
       const data = await api.fetchNotes(token);
       setNotes(data);
     } catch (err) {
-      console.error(err);
       if (err.message === "Unauthorized" || err.status === 401) handleLogout();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      let data;
-      if (isLoginView) {
-        data = await api.login(authForm.email, authForm.password);
-      } else {
-        data = await api.signup(authForm.name, authForm.email, authForm.password);
-      }
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      setAuthForm({ name: "", email: "", password: "" });
-    } catch (err) {
-      setError(err.message || "Authentication failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateOrUpdate = async (e) => {
-    e.preventDefault();
-    if (!noteForm.title.trim()) return;
-    try {
-      if (editingId) {
-        const updated = await api.updateNote(token, editingId, noteForm);
-        setNotes(notes.map(n => n._id === editingId ? updated : n));
-        setEditingId(null);
-      } else {
-        const created = await api.createNote(token, noteForm);
-        setNotes([created, ...notes]);
-      }
-      setNoteForm({ title: "", body: "" });
-    } catch (err) {
-      alert("Failed to save: " + err.message);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this note?")) return;
-    try {
-      await api.deleteNote(token, id);
-      setNotes(notes.filter(n => n._id !== id));
-      if (editingId === id) {
-        setEditingId(null);
-        setNoteForm({ title: "", body: "" });
-      }
-    } catch (err) {
-      alert("Failed to delete: " + err.message);
-    }
+  const handleAuthSuccess = (data) => {
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    setToken(data.token);
+    setUser(data.user);
   };
 
   const handleLogout = () => {
@@ -136,93 +74,69 @@ export default function App() {
     setToken(null);
     setUser(null);
     setNotes([]);
+    toast("See you later!", { icon: "👋" });
+  };
+
+  const handleCreateOrUpdate = async (e) => {
+    e.preventDefault();
+    if (!noteForm.title.trim()) return;
+
+    // Optimistic UI Update (Optional) - or just wait for server
+    const loadingToast = toast.loading(editingId ? "Updating..." : "Saving...");
+
+    try {
+      if (editingId) {
+        const updated = await api.updateNote(token, editingId, noteForm);
+        setNotes(notes.map(n => n._id === editingId ? updated : n));
+        setEditingId(null);
+        toast.success("Note updated!", { id: loadingToast });
+      } else {
+        const created = await api.createNote(token, noteForm);
+        setNotes([created, ...notes]);
+        toast.success("Note created!", { id: loadingToast });
+      }
+      setNoteForm({ title: "", body: "" });
+    } catch (err) {
+      toast.error(err.message, { id: loadingToast });
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this note?")) return;
+    
+    const loadingToast = toast.loading("Deleting...");
+    try {
+      await api.deleteNote(token, id);
+      setNotes(notes.filter(n => n._id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        setNoteForm({ title: "", body: "" });
+      }
+      toast.success("Note deleted", { id: loadingToast });
+    } catch (err) {
+      toast.error("Failed to delete", { id: loadingToast });
+    }
   };
 
   const startEditing = (note) => {
     setEditingId(note._id);
     setNoteForm({ title: note.title, body: note.content || note.body || "" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- RENDER HELPERS ---
+  // Filter Notes based on Search
+  const filteredNotes = notes.filter(note => 
+    note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (note.content || note.body || "").toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // 1. SERVER WAKE-UP SCREEN
-  if (!serverReady) {
-    return (
-      <div className="app-container">
-        <div className="blob-container">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-        </div>
-        <div className="loading-container">
-          <div className="loader-pulse">⚡</div>
-          <div className="loading-text">
-            <h2>Waking up Server...</h2>
-            <p>We are using a free server tier. <br/>This may take up to 60 seconds.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // --- RENDER ---
+  if (!serverReady) return <ServerLoading />;
+  if (!token) return <Auth onAuthSuccess={handleAuthSuccess} />;
 
-  // 2. AUTH SCREEN
-  if (!token) {
-    return (
-      <div className="auth-container">
-        <div className="blob-container">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-        </div>
-        
-        <div className="auth-box glass-panel">
-          <h1 className="brand-title">QuickNotes</h1>
-          <h2 style={{marginTop: 0}}>{isLoginView ? "Welcome Back" : "Create Account"}</h2>
-          {error && <div className="error-msg">{error}</div>}
-          
-          <form onSubmit={handleAuth}>
-            {!isLoginView && (
-              <input 
-                className="glass-input" 
-                placeholder="Full Name" 
-                value={authForm.name}
-                onChange={e => setAuthForm({...authForm, name: e.target.value})}
-                required
-              />
-            )}
-            <input 
-              className="glass-input" 
-              type="email"
-              placeholder="Email Address" 
-              value={authForm.email}
-              onChange={e => setAuthForm({...authForm, email: e.target.value})}
-              required
-            />
-            <input 
-              className="glass-input" 
-              type="password"
-              placeholder="Password" 
-              value={authForm.password}
-              onChange={e => setAuthForm({...authForm, password: e.target.value})}
-              required
-            />
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? "Please wait..." : (isLoginView ? "Log In" : "Sign Up")}
-            </button>
-          </form>
-
-          <p className="auth-switch">
-            {isLoginView ? "New here?" : "Already have an account?"}{" "}
-            <span onClick={() => setIsLoginView(!isLoginView)}>
-              {isLoginView ? "Create an account" : "Login"}
-            </span>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // 3. MAIN APP
   return (
     <div className="app-container">
+      <Toaster position="top-right" />
       <div className="blob-container">
         <div className="blob blob-1"></div>
         <div className="blob blob-2"></div>
@@ -231,6 +145,7 @@ export default function App() {
       <Sidebar user={user} onLogout={handleLogout} />
 
       <main className="main-content">
+        {/* Create / Edit Panel */}
         <section className="create-panel">
           <h2>{editingId ? "Edit Note" : "Create New Note"}</h2>
           <form onSubmit={handleCreateOrUpdate}>
@@ -264,16 +179,27 @@ export default function App() {
           </form>
         </section>
 
+        {/* Notes List */}
         <section className="notes-section">
           <div className="section-header">
-            <h1>Your Collection</h1>
-            <span className="badge">{notes.length} Notes</span>
+            <div>
+              <h1>Your Collection</h1>
+              <span className="badge">{filteredNotes.length} Notes</span>
+            </div>
+            {/* Search Bar */}
+            <input 
+              className="glass-input"
+              style={{ width: "250px", margin: 0 }}
+              placeholder="Search notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
 
           {loading && <div style={{textAlign: "center", color: "#94a3b8"}}>Loading notes...</div>}
 
           <div className="notes-grid">
-            {!loading && notes.map((note) => (
+            {!loading && filteredNotes.map((note) => (
               <div key={note._id} className={`note-card ${editingId === note._id ? "active-editing" : ""}`}>
                 <div className="note-content">
                   <div className="note-title">{note.title}</div>
@@ -288,9 +214,10 @@ export default function App() {
                 </div>
               </div>
             ))}
-            {!loading && notes.length === 0 && (
+            
+            {!loading && filteredNotes.length === 0 && (
               <div style={{ color: "#94a3b8", gridColumn: "1/-1", textAlign: "center", marginTop: "2rem" }}>
-                No notes found.
+                {searchQuery ? "No matching notes found." : "No notes yet. Create one!"}
               </div>
             )}
           </div>
