@@ -132,27 +132,4 @@ Improve accessibility (aria, contrast) and add unit tests.
 Author
 Priyanshu Shrivastava
 Email: priyanshushrivastavaa@gmail.com
-Portfolio / LinkedIn: add links
-
-yaml
-Copy code
-
----
-
-# Now do this (exact commands)
-
-1. Create `assets` folder, add your demo GIF (or placeholder), and add README:
-
-
-cd "C:\Users\priya\OneDrive\Desktop\codding\quicknotes-mern"
-mkdir assets
-# copy your demo.gif into the assets folder (manual step: use file explorer or drag)
-# then create README.md by pasting the content from above
-Commit & push:
-
-bash
-Copy code
-git add README.md assets
-git commit -m "docs: add README and demo placeholder"
-git push origin main
-If you already have README.md replace the contents and commit same commands.
+Portfolio : https://portfolio-priyanshushrivastavaa.vercel.app/
