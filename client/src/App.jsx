@@ -3,8 +3,8 @@ import { Toaster, toast } from "react-hot-toast";
 import Sidebar from "./Sidebar";
 import Auth from "./components/Auth";
 import ServerLoading from "./components/ServerLoading";
-import NoteEditor from "./components/NoteEditor";
-import NoteList from "./components/NoteList";
+import NoteEditor from "./components/NoteEditor"; // <--- Now we use this
+import NoteList from "./components/NoteList";     // <--- And this
 import { api } from "./utils/api";
 import "./styles.css";
 
@@ -137,6 +137,7 @@ export default function App() {
       <Sidebar user={user} onLogout={handleLogout} />
 
       <main className="main-content">
+        {/* REFACTORED: Note Editor Component */}
         <NoteEditor 
           noteForm={noteForm}
           setNoteForm={setNoteForm}
@@ -145,6 +146,7 @@ export default function App() {
           onCancel={handleCancelEdit}
         />
 
+        {/* REFACTORED: Note List Component */}
         <NoteList 
           notes={notes}
           loading={loading}
